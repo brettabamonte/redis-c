@@ -7,16 +7,104 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
+#include <assert.h>
+
+const size_t k_max_msg = 4096;
 
 static void msg(const char *msg)
 {
     fprintf(stderr, "%s\n", msg);
 }
 
+static int32_t read_full(int fd, char *buf, size_t n)
+{
+    while (n > 0)
+    {
+        ssize_t rv = read(fd, buf, n);
+        if (rv <= 0)
+        {
+            return -1; // Error or unexpected EOF
+        }
+        assert((size_t)rv <= n);
+        n -= (size_t)rv;
+        buf += rv;
+    }
+    return 0;
+}
+
+static int32_t write_all(int fd, const char *buf, size_t n)
+{
+    while (n > 0)
+    {
+        ssize_t rv = write(fd, buf, n);
+        if (rv <= 0)
+        {
+            return -1; // error
+        }
+
+        assert((ssize_t)rv <= n);
+        n -= (ssize_t)rv;
+        buf += rv;
+    }
+    return 0;
+}
+
+static int32_t one_request(int connfd)
+{
+    // 4 bytes header
+    char rBuf[4 + k_max_msg + 1];
+    errno = 0;
+    int32_t err = read_full(connfd, rBuf, 4);
+
+    if (err)
+    {
+        if (errno == 0)
+        {
+            msg("EOF");
+        }
+        else
+        {
+            msg("read() error");
+        }
+        return err;
+    }
+
+    uint32_t len = 0;
+    memcpy(&len, rBuf, 4); // assuming little endian
+
+    // Check msg size
+    if (len > k_max_msg)
+    {
+        msg("msg too long");
+        return -1;
+    }
+
+    // Request body
+    err = read_full(connfd, &rBuf[4], len);
+    if (err)
+    {
+        msg("read() error");
+        return err;
+    }
+
+    // Do something
+    rBuf[4 + len] = '\0'; // Add end of msg char
+    printf("client says: %s\n", &rBuf[4]);
+
+    // Reply using same protocol
+    const char reply[] = "world";
+    char wBuf[4 + sizeof(reply)];
+    len = (uint32_t)strlen(reply);
+    memcpy(wBuf, &len, 4);
+    memcpy(&wBuf[4], reply, len);
+    return write_all(connfd, wBuf, 4 + len);
+}
+
 static void do_something(int connfd)
 {
     char rBuf[64] = {};
     ssize_t n = read(connfd, rBuf, sizeof(rBuf) - 1);
+
     if (n < 0)
     {
         msg("read() error");
@@ -77,7 +165,16 @@ int main()
             continue; // error
         }
 
-        do_something(connfd);
+        while (true)
+        {
+            int32_t err = one_request(connfd);
+
+            if (err)
+            {
+                break;
+            }
+        }
+
         close(connfd);
     }
 
