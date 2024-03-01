@@ -130,18 +130,25 @@ int main()
         die("connect()");
     }
 
-    char msg[] = "hello";
-    write(fd, msg, strlen(msg));
-
-    char rBuf[64] = {};
-    ssize_t n = read(fd, rBuf, sizeof(rBuf) - 1);
-    if (n < 0)
+    int32_t err = query(fd, "hello1");
+    if (err)
     {
-        die("read()");
+        goto L_Done;
     }
 
-    printf("server says: %s\n", rBuf);
-    close(fd);
+    err = query(fd, "hello2");
+    if (err)
+    {
+        goto L_Done;
+    }
 
+    err = query(fd, "hello3");
+    if (err)
+    {
+        goto L_Done;
+    }
+
+L_Done:
+    close(fd);
     return 0;
 }
