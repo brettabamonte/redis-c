@@ -8,12 +8,44 @@
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <assert.h>
+#include <fcntl.h>
 
 const size_t k_max_msg = 4096;
 
 static void msg(const char *msg)
 {
     fprintf(stderr, "%s\n", msg);
+}
+
+static void die(const char *msg)
+{
+    int err = errno;
+    fprintf(stderr, "[%d] %s\n", err, msg);
+    abort();
+}
+
+// Sets a file descriptor to non-blocking mode
+static void set_fd_nb(int fd)
+{
+    errno = 0;
+
+    int flags = fcntl(fd, F_GETFL, 0);
+
+    if (errno)
+    {
+        die("fcntl error");
+        return;
+    }
+
+    flags |= O_NONBLOCK;
+
+    errno = 0;
+
+    (void)fcntl(fd, F_SETFL, flags);
+    if (errno)
+    {
+        die("fcntl error");
+    }
 }
 
 static int32_t read_full(int fd, char *buf, size_t n)
@@ -105,13 +137,6 @@ static int32_t one_request(int connfd)
     memcpy(wBuf, &len, 4);        // Copy len of write msg to write buffer
     memcpy(&wBuf[4], reply, len); // Copy msg to write buffer
     return write_all(connfd, wBuf, 4 + len);
-}
-
-static void die(const char *msg)
-{
-    int err = errno;
-    fprintf(stderr, "[%d] %s\n", err, msg);
-    abort();
 }
 
 int main()
