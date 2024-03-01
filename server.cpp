@@ -48,6 +48,27 @@ static void set_fd_nb(int fd)
     }
 }
 
+enum
+{
+    STATE_REQ = 0,
+    STATE_RES = 1,
+    STATE_END = 2
+};
+
+struct Connection
+{
+    int fd = -1;
+    // State of connection
+    uint32_t state = 0;
+    // Buffer for reading
+    size_t read_buffer_size = 0;
+    uint8_t read_buffer[4 + k_max_msg];
+    // Buffer for writing
+    size_t write_buffer_size = 0;
+    size_t write_buffer_sent = 0;
+    uint8_t write_buffer[4 + k_max_msg];
+};
+
 static int32_t read_full(int fd, char *buf, size_t n)
 {
     while (n > 0)
