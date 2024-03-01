@@ -88,6 +88,26 @@ static int32_t query(int fd, const char *text)
             msg("read() error");
         }
     }
+
+    memcpy(&len, rBuf, 4);
+    if (len > k_max_msg)
+    {
+        msg("msg too long");
+        return -1;
+    }
+
+    err = read_full(fd, &rBuf[4], len);
+
+    if (err)
+    {
+        msg("read() error for body");
+        return err;
+    }
+
+    rBuf[4 + len] = '\0';
+    printf("server says: %s\n", &rBuf[4]);
+
+    return 0;
 }
 
 int main()
