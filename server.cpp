@@ -9,6 +9,7 @@
 #include <netinet/ip.h>
 #include <assert.h>
 #include <fcntl.h>
+#include <vector>
 
 const size_t k_max_msg = 4096;
 
@@ -50,9 +51,9 @@ static void set_fd_nb(int fd)
 
 enum
 {
-    STATE_REQ = 0,
-    STATE_RES = 1,
-    STATE_END = 2
+    STATE_REQ = 0, // Reading requests
+    STATE_RES = 1, // Sending requests
+    STATE_END = 2  // Terminate connection
 };
 
 struct Connection
@@ -68,6 +69,47 @@ struct Connection
     size_t write_buffer_sent = 0;
     uint8_t write_buffer[4 + k_max_msg];
 };
+
+static void conn_put(std::vector<Connection *> &fd_to_connection, struct Connection *conn) {
+    if(fd_to_connection.size() <= (size_t)conn->fd) {
+        fd_to_connection.resize(conn->fd + 1);
+    }
+
+    fd_to_connection[conn->fd] = conn;
+}
+
+static int32_t accept_new_conn(std::vector<Connection *> &fd_to_connection, int fd) {
+    //Accept
+    struct sockaddr_in client_addr = {};
+    socklen_t socklen = sizeof(client_addr);
+
+    int connfd = accept(fd, (struct sockaddr*) &client_addr, &socklen);
+
+    if(connfd < 0) {
+        msg("accept() error");
+        return -1;
+    }
+
+    //Set new connection fd to nonblocking mode
+    set_fd_nb(connfd);
+
+    //Create the Connection struct
+    struct Connection *conn = (struct Connection*)malloc(sizeof(struct Connection));
+
+    if(!conn) {
+        close(connfd);
+        return -1;
+    }
+
+    conn->fd = connfd;
+    conn->state = STATE_REQ;
+    conn->read_buffer_size = 0;
+    conn->write_buffer_size = 0;
+    conn->write_buffer_sent = 0;
+    conn_put(fd_to_connection, conn);
+
+    return 0;
+}
 
 static int32_t read_full(int fd, char *buf, size_t n)
 {
@@ -189,29 +231,61 @@ int main()
         die("listen()");
     }
 
-    // Accept connections
+    //Map of all client connections, keyed with fd
+    std::vector<Connection *> fd_to_connections;
+
+    //Set the listening fd to nonblocking mode
+    set_fd_nb(fd);
+
+    //Event loop
+    std::vector<struct pollfd> poll_args;
     while (true)
     {
-        // accept
-        struct sockaddr_in client_addr = {};
-        socklen_t addrlen = sizeof(client_addr);
-        int connfd = accept(fd, (struct sockaddr *)&client_addr, &addrlen);
-        if (connfd < 0)
-        {
-            continue; // error
+        //Prepare the args of the poll()
+        poll_args.clear();
+
+        //For convenience, the listening fd is put in the 1st position
+        struct pollfd pfd = {fd, POLLIN, 0};
+        poll_args.push_back(pfd);
+
+        //Connection fds
+        for(Connection *conn : fd_to_connections) {
+            if(!conn) {
+                continue;
+            }
+
+            struct pollfd pfd = {};
+            pfd.fd = conn->fd;
+            pfd.events = (conn->state == STATE_REQ) ? POLLIN : POLLOUT;
+            pfd.events = pfd.events | POLLERR;
+            poll_args.push_back(pfd);
         }
 
-        while (true)
-        {
-            int32_t err = one_request(connfd);
+        //Poll for active fds
+        //The timeout arg doesn't matter here
+        int rv = poll(poll_args.data(), (nfds_t)poll_args.size(), 1000);
+        if(rv < 0) {
+            die("poll");
+        }
 
-            if (err)
-            {
-                break;
+        //Process active connections
+        for(size_t i = 1; i < poll_args.size(); ++i) {
+            if(poll_args[i].revents) {
+                Connection *conn = fd_to_connections[poll_args[i].fd];
+                connection_io(conn);
+                if(conn->state == STATE_END) {
+                    //Client closed normall or bad thing happened
+                    fd_to_connections[conn->fd] = NULL;
+                    (void)close(conn->fd);
+                    free(conn);
+                }
             }
         }
 
-        close(connfd);
+        //Try to accept a new connection if the listening fd is active
+        if(poll_args[0].revents) {
+            (void)accept_new_conn(fd_to_connections, fd);
+        }
     }
 
     return 0;
