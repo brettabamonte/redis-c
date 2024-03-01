@@ -7,6 +7,42 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
+#include <assert.h>
+
+// const size_t k_max_msg = 4096;
+
+static int32_t read_full(int fd, char *buf, size_t n)
+{
+    while (n > 0)
+    {
+        ssize_t rv = read(fd, buf, n);
+        if (rv <= 0)
+        {
+            return -1; // Error or unexpected EOF
+        }
+        assert((size_t)rv <= n);
+        n -= (size_t)rv;
+        buf += rv;
+    }
+    return 0;
+}
+
+static int32_t write_all(int fd, const char *buf, size_t n)
+{
+    while (n > 0)
+    {
+        ssize_t rv = write(fd, buf, n);
+        if (rv <= 0)
+        {
+            return -1; // error
+        }
+
+        assert((ssize_t)rv <= n);
+        n -= (ssize_t)rv;
+        buf += rv;
+    }
+    return 0;
+}
 
 static void die(const char *msg)
 {
@@ -14,6 +50,23 @@ static void die(const char *msg)
     fprintf(stderr, "[%d] %s\n", err, msg);
     abort();
 }
+
+// static int32_t query(int fd, const char *text)
+// {
+//     uint32_t len = (uint32_t)strlen(text);
+
+//     if (len > k_max_msg) {
+//         return -1;
+//     }
+
+//     char wBuf[4 + k_max_msg];
+//     memccpy(wBuf, &len, 4);
+//     memccpy(&wBuf[4], text, len);
+
+//     if(int32_t err = write_all(fd, wBuf, 4 + len)) {
+//         return err;
+//     }
+// }
 
 int main()
 {
