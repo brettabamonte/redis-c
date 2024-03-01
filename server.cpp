@@ -9,8 +9,6 @@
 #include <netinet/ip.h>
 #include <assert.h>
 
-// left off at 4.4 the client
-
 const size_t k_max_msg = 4096;
 
 static void msg(const char *msg)
@@ -107,23 +105,6 @@ static int32_t one_request(int connfd)
     memcpy(wBuf, &len, 4);        // Copy len of write msg to write buffer
     memcpy(&wBuf[4], reply, len); // Copy msg to write buffer
     return write_all(connfd, wBuf, 4 + len);
-}
-
-static void do_something(int connfd)
-{
-    char rBuf[64] = {};
-    ssize_t n = read(connfd, rBuf, sizeof(rBuf) - 1);
-
-    if (n < 0)
-    {
-        msg("read() error");
-        return;
-    }
-
-    printf("client says: %s\n", rBuf);
-
-    char wBuf[] = "world";
-    write(connfd, wBuf, strlen(wBuf));
 }
 
 static void die(const char *msg)
