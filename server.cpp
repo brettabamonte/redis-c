@@ -10,8 +10,35 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <vector>
+#include <stdbool.h>
+#include <poll.h>
 
 const size_t k_max_msg = 4096;
+enum
+{
+    STATE_REQ = 0, // Reading requests
+    STATE_RES = 1, // Sending requests
+    STATE_END = 2  // Terminate connection
+};
+
+struct Connection
+{
+    int fd = -1;
+    // State of connection
+    uint32_t state = 0;
+    // Buffer for reading
+    size_t read_buffer_size = 0;
+    uint8_t read_buffer[4 + k_max_msg];
+    // Buffer for writing
+    size_t write_buffer_size = 0;
+    size_t write_buffer_sent = 0;
+    uint8_t write_buffer[4 + k_max_msg];
+};
+
+static void state_res(Connection *conn);
+static void state_req(Connection *conn);
+static bool try_flush_buffer(Connection *conn);
+static bool try_fill_buffer(Connection *conn);
 
 static void msg(const char *msg)
 {
@@ -49,54 +76,38 @@ static void set_fd_nb(int fd)
     }
 }
 
-enum
+static void conn_put(std::vector<Connection *> &fd_to_connection, struct Connection *conn)
 {
-    STATE_REQ = 0, // Reading requests
-    STATE_RES = 1, // Sending requests
-    STATE_END = 2  // Terminate connection
-};
-
-struct Connection
-{
-    int fd = -1;
-    // State of connection
-    uint32_t state = 0;
-    // Buffer for reading
-    size_t read_buffer_size = 0;
-    uint8_t read_buffer[4 + k_max_msg];
-    // Buffer for writing
-    size_t write_buffer_size = 0;
-    size_t write_buffer_sent = 0;
-    uint8_t write_buffer[4 + k_max_msg];
-};
-
-static void conn_put(std::vector<Connection *> &fd_to_connection, struct Connection *conn) {
-    if(fd_to_connection.size() <= (size_t)conn->fd) {
+    if (fd_to_connection.size() <= (size_t)conn->fd)
+    {
         fd_to_connection.resize(conn->fd + 1);
     }
 
     fd_to_connection[conn->fd] = conn;
 }
 
-static int32_t accept_new_conn(std::vector<Connection *> &fd_to_connection, int fd) {
-    //Accept
+static int32_t accept_new_conn(std::vector<Connection *> &fd_to_connection, int fd)
+{
+    // Accept
     struct sockaddr_in client_addr = {};
     socklen_t socklen = sizeof(client_addr);
 
-    int connfd = accept(fd, (struct sockaddr*) &client_addr, &socklen);
+    int connfd = accept(fd, (struct sockaddr *)&client_addr, &socklen);
 
-    if(connfd < 0) {
+    if (connfd < 0)
+    {
         msg("accept() error");
         return -1;
     }
 
-    //Set new connection fd to nonblocking mode
+    // Set new connection fd to nonblocking mode
     set_fd_nb(connfd);
 
-    //Create the Connection struct
-    struct Connection *conn = (struct Connection*)malloc(sizeof(struct Connection));
+    // Create the Connection struct
+    struct Connection *conn = (struct Connection *)malloc(sizeof(struct Connection));
 
-    if(!conn) {
+    if (!conn)
+    {
         close(connfd);
         return -1;
     }
@@ -109,6 +120,180 @@ static int32_t accept_new_conn(std::vector<Connection *> &fd_to_connection, int 
     conn_put(fd_to_connection, conn);
 
     return 0;
+}
+
+static bool try_one_request(Connection *conn)
+{
+    // Try to parse a request from buffer
+    if (conn->read_buffer_size < 4)
+    {
+        // Not enough data in buffer. Retry in next iteration
+        return false;
+    }
+
+    uint32_t len = 0;
+
+    memcpy(&len, &conn->read_buffer[0], 4);
+
+    if (len > k_max_msg)
+    {
+        msg("too long");
+        conn->state = STATE_END;
+        return false;
+    }
+
+    if (4 + len > conn->read_buffer_size)
+    {
+        // Not enough data in buffer. Retry in next iteration
+        return false;
+    }
+
+    // Get request, do something with it
+    printf("client says: %.%s\n", len, &conn->read_buffer[4]);
+
+    // Generate echoing response
+    memcpy(&conn->write_buffer[0], &len, 4);
+    memcpy(&conn->write_buffer[4], &conn->read_buffer[4], len);
+    conn->write_buffer_size = 4 + len;
+
+    // Remove the request from the buffer
+    // FIXME: memmove in prod isn't efficient
+    size_t remain = conn->read_buffer_size - 4 - len;
+    if (remain)
+    {
+        memmove(conn->read_buffer, &conn->read_buffer[4 + len], remain);
+    }
+
+    conn->read_buffer_size = remain;
+
+    // Change state
+    conn->state = STATE_RES;
+    state_res(conn);
+
+    // Continue outer loop if the request was fully processed
+    return (conn->state == STATE_REQ);
+}
+
+// Fill read buffer with data. If buffer get's full, we process data immediately to free buffer space
+// This is why the function is looped until we hit EAGAIN
+// Syscalls (read, etc.) are retried after EINTR. EINTR means syscall was interrupted
+static bool try_fill_buffer(Connection *conn)
+{
+    // Try to fill the buffer
+    assert(conn->read_buffer_size < sizeof(conn->read_buffer));
+
+    ssize_t rv = 0;
+
+    do
+    {
+        size_t cap = sizeof(conn->read_buffer) - conn->read_buffer_size;
+        rv = read(conn->fd, &conn->read_buffer[conn->read_buffer_size], cap);
+    } while (rv < 0 && errno == EINTR);
+
+    if (rv < 0 && errno == EAGAIN)
+    {
+        // Got EAGAIN, so stop
+        return false;
+    }
+
+    if (rv < 0)
+    {
+        msg("read() error");
+        conn->state = STATE_END;
+        return false;
+    }
+
+    if (rv == 0)
+    {
+        if (conn->read_buffer_size > 0)
+        {
+            msg("unexpected EOF");
+        }
+        else
+        {
+            msg("EOF");
+        }
+
+        conn->state = STATE_END;
+        return false;
+    }
+
+    conn->read_buffer_size += (size_t)rv;
+    assert(conn->read_buffer_size <= sizeof(conn->read_buffer));
+
+    // Process req one by one, pipelining
+    while (try_one_request(conn))
+    {
+    }
+    return (conn->state == STATE_REQ);
+}
+
+static void state_req(Connection *conn)
+{
+    while (try_fill_buffer(conn))
+    {
+    }
+}
+
+static void state_res(Connection *conn)
+{
+    while (try_flush_buffer(conn))
+    {
+    }
+}
+
+static bool try_flush_buffer(Connection *conn)
+{
+    ssize_t rv = 0;
+
+    do
+    {
+        ssize_t remain = conn->write_buffer_size - conn->write_buffer_sent;
+        rv = write(conn->fd, &conn->write_buffer[conn->write_buffer_sent], remain);
+    } while (rv < 0 && errno == EAGAIN);
+
+    if (rv < 0 && errno == EAGAIN)
+    {
+        // Got EAGAIN, stop
+        return false;
+    }
+
+    if (rv < 0)
+    {
+        msg("write() error");
+        conn->state = STATE_END;
+        return false;
+    }
+
+    conn->write_buffer_sent += (size_t)rv;
+    assert(conn->write_buffer_sent <= conn->write_buffer_size);
+    if (conn->write_buffer_sent == conn->write_buffer_size)
+    {
+        // Response fully sent, change state back
+        conn->state = STATE_REQ;
+        conn->write_buffer_sent = 0;
+        conn->write_buffer_size = 0;
+        return false;
+    }
+
+    // Still go some data in the write buffer, keep writing
+    return true;
+}
+
+static void connection_io(Connection *conn)
+{
+    if (conn->state == STATE_REQ)
+    {
+        state_req(conn);
+    }
+    else if (conn->state == STATE_RES)
+    {
+        state_res(conn);
+    }
+    else
+    {
+        assert(0);
+    }
 }
 
 static int32_t read_full(int fd, char *buf, size_t n)
@@ -231,26 +416,28 @@ int main()
         die("listen()");
     }
 
-    //Map of all client connections, keyed with fd
+    // Map of all client connections, keyed with fd
     std::vector<Connection *> fd_to_connections;
 
-    //Set the listening fd to nonblocking mode
+    // Set the listening fd to nonblocking mode
     set_fd_nb(fd);
 
-    //Event loop
+    // Event loop
     std::vector<struct pollfd> poll_args;
     while (true)
     {
-        //Prepare the args of the poll()
+        // Prepare the args of the poll()
         poll_args.clear();
 
-        //For convenience, the listening fd is put in the 1st position
+        // For convenience, the listening fd is put in the 1st position
         struct pollfd pfd = {fd, POLLIN, 0};
         poll_args.push_back(pfd);
 
-        //Connection fds
-        for(Connection *conn : fd_to_connections) {
-            if(!conn) {
+        // Connection fds
+        for (Connection *conn : fd_to_connections)
+        {
+            if (!conn)
+            {
                 continue;
             }
 
@@ -261,20 +448,24 @@ int main()
             poll_args.push_back(pfd);
         }
 
-        //Poll for active fds
-        //The timeout arg doesn't matter here
+        // Poll for active fds
+        // The timeout arg doesn't matter here
         int rv = poll(poll_args.data(), (nfds_t)poll_args.size(), 1000);
-        if(rv < 0) {
+        if (rv < 0)
+        {
             die("poll");
         }
 
-        //Process active connections
-        for(size_t i = 1; i < poll_args.size(); ++i) {
-            if(poll_args[i].revents) {
+        // Process active connections
+        for (size_t i = 1; i < poll_args.size(); ++i)
+        {
+            if (poll_args[i].revents)
+            {
                 Connection *conn = fd_to_connections[poll_args[i].fd];
                 connection_io(conn);
-                if(conn->state == STATE_END) {
-                    //Client closed normall or bad thing happened
+                if (conn->state == STATE_END)
+                {
+                    // Client closed normall or bad thing happened
                     fd_to_connections[conn->fd] = NULL;
                     (void)close(conn->fd);
                     free(conn);
@@ -282,8 +473,9 @@ int main()
             }
         }
 
-        //Try to accept a new connection if the listening fd is active
-        if(poll_args[0].revents) {
+        // Try to accept a new connection if the listening fd is active
+        if (poll_args[0].revents)
+        {
             (void)accept_new_conn(fd_to_connections, fd);
         }
     }
