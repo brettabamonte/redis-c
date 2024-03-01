@@ -9,6 +9,8 @@
 #include <netinet/ip.h>
 #include <assert.h>
 
+// left off at 4.4 the client
+
 const size_t k_max_msg = 4096;
 
 static void msg(const char *msg)
@@ -51,13 +53,17 @@ static int32_t write_all(int fd, const char *buf, size_t n)
 
 static int32_t one_request(int connfd)
 {
-    // 4 bytes header
+    // Create buffer to read in data. Add size for len and end
     char rBuf[4 + k_max_msg + 1];
     errno = 0;
+
+    // Read in first 4 bytes that specify len of msg
     int32_t err = read_full(connfd, rBuf, 4);
 
+    // Check if error occured when reading in len of msg
     if (err)
     {
+        // We reached EOF
         if (errno == 0)
         {
             msg("EOF");
@@ -69,8 +75,9 @@ static int32_t one_request(int connfd)
         return err;
     }
 
+    // Assume little endian. Copy read buffer to length
     uint32_t len = 0;
-    memcpy(&len, rBuf, 4); // assuming little endian
+    memcpy(&len, rBuf, 4);
 
     // Check msg size
     if (len > k_max_msg)
@@ -79,8 +86,10 @@ static int32_t one_request(int connfd)
         return -1;
     }
 
-    // Request body
+    // Read in request body
     err = read_full(connfd, &rBuf[4], len);
+
+    // Check for error that occured during read in
     if (err)
     {
         msg("read() error");
@@ -95,8 +104,8 @@ static int32_t one_request(int connfd)
     const char reply[] = "world";
     char wBuf[4 + sizeof(reply)];
     len = (uint32_t)strlen(reply);
-    memcpy(wBuf, &len, 4);
-    memcpy(&wBuf[4], reply, len);
+    memcpy(wBuf, &len, 4);        // Copy len of write msg to write buffer
+    memcpy(&wBuf[4], reply, len); // Copy msg to write buffer
     return write_all(connfd, wBuf, 4 + len);
 }
 
