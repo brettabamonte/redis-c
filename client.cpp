@@ -9,7 +9,12 @@
 #include <netinet/ip.h>
 #include <assert.h>
 
-// const size_t k_max_msg = 4096;
+const size_t k_max_msg = 4096;
+
+static void msg(const char *msg)
+{
+    fprintf(stderr, "%s\n", msg);
+}
 
 static int32_t read_full(int fd, char *buf, size_t n)
 {
@@ -51,22 +56,39 @@ static void die(const char *msg)
     abort();
 }
 
-// static int32_t query(int fd, const char *text)
-// {
-//     uint32_t len = (uint32_t)strlen(text);
+static int32_t query(int fd, const char *text)
+{
+    uint32_t len = (uint32_t)strlen(text);
 
-//     if (len > k_max_msg) {
-//         return -1;
-//     }
+    if (len > k_max_msg)
+    {
+        return -1;
+    }
 
-//     char wBuf[4 + k_max_msg];
-//     memccpy(wBuf, &len, 4);
-//     memccpy(&wBuf[4], text, len);
+    char wBuf[4 + k_max_msg];
+    memcpy(wBuf, &len, 4);
+    memcpy(&wBuf[4], text, len);
 
-//     if(int32_t err = write_all(fd, wBuf, 4 + len)) {
-//         return err;
-//     }
-// }
+    if (int32_t err = write_all(fd, wBuf, 4 + len))
+    {
+        return err;
+    }
+
+    char rBuf[4 + k_max_msg + 1];
+    errno = 0;
+    int32_t err = read_full(fd, rBuf, 4);
+    if (err)
+    {
+        if (errno == 0)
+        {
+            msg("EOF");
+        }
+        else
+        {
+            msg("read() error");
+        }
+    }
+}
 
 int main()
 {
