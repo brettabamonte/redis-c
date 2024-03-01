@@ -13,6 +13,11 @@
 #include <stdbool.h>
 #include <poll.h>
 
+// FUTURE UPDATES:
+// 1. Use epoll instead of poll
+// 2. Perform memove only before a read
+// 3. Buffer multiple response and flush with a single write call (buffer limit may get full, flush then)
+
 const size_t k_max_msg = 4096;
 enum
 {
