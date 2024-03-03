@@ -124,13 +124,21 @@ static int32_t read_res(int fd)
         return err;
     }
 
-    rBuf[4 + len] = '\0';
-    printf("server says: %s\n", &rBuf[4]);
+    // Read rescode and print result
+    uint32_t rescode = 0;
+    if (len < 4)
+    {
+        msg("bad response");
+        return -1;
+    }
+    memcpy(&rescode, &rBuf[4], 4);
+
+    printf("server says: [%u] %.*s\n", rescode, len - 4, &rBuf[8]);
 
     return 0;
 }
 
-int main()
+int main(int argc, char **argv)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -145,23 +153,23 @@ int main()
     addr.sin_addr.s_addr = ntohl(INADDR_LOOPBACK); // 127.0.0.1
     int rv = connect(fd, (const struct sockaddr *)&addr, sizeof(addr));
 
-    const char *query_list[4] = {"hello1", "hello2", "hello3", "brett says hi"};
-    for (size_t i = 0; i < 4; ++i)
+    std::vector<std::string> cmd;
+
+    for (int i = 1; i < argc; ++i)
     {
-        int32_t err = send_req(fd, query_list[i]);
-        if (err)
-        {
-            goto L_DONE;
-        }
+        cmd.push_back(argv[i]);
     }
 
-    for (size_t i = 0; i < 4; ++i)
+    int32_t err = send_req(fd, cmd);
+    if (err)
     {
-        int32_t err = read_res(fd);
-        if (err)
-        {
-            goto L_DONE;
-        }
+        goto L_DONE;
+    }
+
+    err = read_res(fd);
+    if (err)
+    {
+        goto L_DONE;
     }
 
 L_DONE:
