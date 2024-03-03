@@ -118,60 +118,6 @@ static int32_t read_res(int fd)
     return 0;
 }
 
-// static int32_t query(int fd, const char *text)
-// {
-//     // uint32_t len = (uint32_t)strlen(text);
-
-//     // if (len > k_max_msg)
-//     // {
-//     //     return -1;
-//     // }
-
-//     // char wBuf[4 + k_max_msg];
-//     // memcpy(wBuf, &len, 4);
-//     // memcpy(&wBuf[4], text, len);
-
-//     // if (int32_t err = write_all(fd, wBuf, 4 + len))
-//     // {
-//     //     return err;
-//     // }
-
-//     char rBuf[4 + k_max_msg + 1];
-//     errno = 0;
-//     int32_t err = read_full(fd, rBuf, 4);
-//     if (err)
-//     {
-//         if (errno == 0)
-//         {
-//             msg("EOF");
-//         }
-//         else
-//         {
-//             msg("read() error");
-//         }
-//     }
-
-//     memcpy(&len, rBuf, 4);
-//     if (len > k_max_msg)
-//     {
-//         msg("msg too long");
-//         return -1;
-//     }
-
-//     err = read_full(fd, &rBuf[4], len);
-
-//     if (err)
-//     {
-//         msg("read() error for body");
-//         return err;
-//     }
-
-//     rBuf[4 + len] = '\0';
-//     printf("server says: %s\n", &rBuf[4]);
-
-//     return 0;
-// }
-
 int main()
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
