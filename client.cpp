@@ -152,29 +152,6 @@ int main()
         }
     }
 
-    // if (rv)
-    // {
-    //     die("connect()");
-    // }
-
-    // int32_t err = query(fd, "hello1");
-    // if (err)
-    // {
-    //     goto L_Done;
-    // }
-
-    // err = query(fd, "hello2");
-    // if (err)
-    // {
-    //     goto L_Done;
-    // }
-
-    // err = query(fd, "hello3");
-    // if (err)
-    // {
-    //     goto L_Done;
-    // }
-
 L_DONE:
     close(fd);
     return 0;
