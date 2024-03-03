@@ -8,6 +8,8 @@
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <assert.h>
+#include <string>
+#include <vector>
 
 // FUTURE UPDATES:
 
@@ -58,9 +60,14 @@ static void die(const char *msg)
     abort();
 }
 
-static int32_t send_req(int fd, const char *text)
+static int32_t send_req(int fd, const std::vector<std::string> &cmd)
 {
-    uint32_t len = (uint32_t)strlen(text);
+    uint32_t len = 4;
+
+    for (const std::string &s : cmd)
+    {
+        len += 4 + s.size();
+    }
 
     if (len > k_max_msg)
     {
@@ -69,14 +76,19 @@ static int32_t send_req(int fd, const char *text)
 
     char wBuf[4 + k_max_msg];
     memcpy(wBuf, &len, 4);
-    memcpy(&wBuf[4], text, len);
+    uint32_t n = cmd.size();
+    memcpy(&wBuf[4], &n, len);
+    size_t cur = 8;
 
-    if (int32_t err = write_all(fd, wBuf, 4 + len))
+    for (const std::string &s : cmd)
     {
-        return err;
+        uint32_t p = (uint32_t)s.size();
+        memcpy(&wBuf[cur], &p, 4);
+        memcpy(&wBuf[cur + 4], s.data(), s.size());
+        cur += 4 + s.size();
     }
 
-    return 0;
+    return write_all(fd, wBuf, 4 + len);
 }
 
 static int32_t read_res(int fd)
