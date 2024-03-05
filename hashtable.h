@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -21,7 +23,8 @@ struct HMap
     size_t resizing_pos = 0;
 };
 
-const size_t k_max_load_factor = 0;
-const size_t k_resizing_work = 128; // constant work
-
 void hm_insert(HMap *hmap, HNode *node);
+HNode *hm_pop(HMap *hmap, HNode *key, bool (*eq)(HNode *, HNode *));
+HNode *hm_lookup(HMap *hmap, HNode *key, bool (*eq)(HNode *, HNode *));
+void hm_destroy(HMap *hmap);
+size_t hm_size(HMap *hmap);
