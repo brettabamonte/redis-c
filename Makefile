@@ -24,6 +24,3 @@ client: $(CLIENT_OBJS)
 clean:
 	rm -f src/*.o server
 	rm -f src/*.o client
-
-# client: src/client.cpp
-# 	g++ -Wall -Wextra -O2 -o client src/client.cpp
