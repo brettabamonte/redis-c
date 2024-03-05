@@ -41,7 +41,28 @@ enum
     RES_NX = 2,
 };
 
+struct Entry {
+    struct HNode node;
+    std::string key;
+    std::string val;
+};
+
 static std::map<std::string, std::string> g_map;
+
+static uint64_t str_hash(const uint8_t *data, size_t len) {
+    uint32_t h = 0x811C9DC5;
+    for(size_t i = 0; i < len; i++) {
+        h = (h + data[i]) * 0x10000193;
+    }
+
+    return h;
+}
+
+static bool entry_eq(HNode *lhs, HNode *rhs) {
+    struct Entry *le = container_of(lhs, struct Entry, node);
+    struct Entry *re = container_of(rhs, struct Entry, node);
+    return le->key == re->key;
+}
 
 struct Connection
 {
@@ -55,12 +76,6 @@ struct Connection
     size_t write_buffer_size = 0;
     size_t write_buffer_sent = 0;
     uint8_t write_buffer[4 + k_max_msg];
-};
-
-struct Entry {
-    struct HNode node;
-    std::string key;
-    std::string val;
 };
 
 static struct {
@@ -574,20 +589,6 @@ static int32_t one_request(int connfd)
     return write_all(connfd, wBuf, 4 + len);
 }
 
-static uint64_t str_hash(const uint8_t *data, size_t len) {
-    uint32_t h = 0x811C9DC5;
-    for(size_t i = 0; i < len; i++) {
-        h = (h + data[i]) * 0x10000193;
-    }
-
-    return h;
-}
-
-static bool entry_eq(HNode *lhs, HNode *rhs) {
-    struct Entry *le = container_of(lhs, struct Entry, node);
-    struct Entry *re = container_of(rhs, struct Entry, node);
-    return le->key == re->key;
-}
 
 int main()
 {
