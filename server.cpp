@@ -14,6 +14,12 @@
 #include <poll.h>
 #include <map>
 #include <string>
+#include "hashtable.h"
+
+#define container_of(ptr, type, member) ({ \
+    const typeof( ((type *)0)->member ) *__mptr = (ptr); \
+    (type *)( (char *) __mptr - offsetof(type, member)); \
+})
 
 // FUTURE UPDATES:
 // 1. Use epoll instead of poll
@@ -42,7 +48,7 @@ struct Connection
     int fd = -1;
     // State of connection
     uint32_t state = 0;
-    // Buffer for reading
+    // Buffer for readin
     size_t read_buffer_size = 0;
     uint8_t read_buffer[4 + k_max_msg];
     // Buffer for writing
@@ -50,6 +56,16 @@ struct Connection
     size_t write_buffer_sent = 0;
     uint8_t write_buffer[4 + k_max_msg];
 };
+
+struct Entry {
+    struct HNode node;
+    std::string key;
+    std::string val;
+};
+
+static struct {
+    HMap db;
+} g_data;
 
 static void state_res(Connection *conn);
 static void state_req(Connection *conn);
@@ -138,33 +154,67 @@ static int32_t accept_new_conn(std::vector<Connection *> &fd_to_connection, int 
     return 0;
 }
 
-static uint32_t do_get(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen)
-{
-    if (!g_map.count(cmd[1]))
-    {
+static uint32_t do_get(std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen) {
+    Entry key;
+    key.key.swap(cmd[1]);
+    key.node.hcode = str_hash((uint8_t *)key.key.data(), key.key.size());
+
+    HNode *node = hm_lookup(&g_data.db, &key.node, &entry_eq);
+
+    if(!node) {
         return RES_NX;
     }
 
-    std::string &val = g_map[cmd[1]];
+    const std::string &val = container_of(node, Entry, node)->val;
     assert(val.size() <= k_max_msg);
     memcpy(res, val.data(), val.size());
     *reslen = (uint32_t)val.size();
     return RES_OK;
 }
 
-static uint32_t do_set(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen)
-{
+static uint32_t do_set(std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen)
+{   
     (void)res;
     (void)reslen;
-    g_map[cmd[1]] = cmd[2];
+
+    //Create key
+    Entry key;
+    key.key.swap(cmd[1]);
+    key.node.hcode = str_hash((uint8_t *) key.key.data(), key.key.size());
+
+    //Find node
+    HNode *node = hm_lookup(&g_data.db, &key.node, &entry_eq);
+
+    if(node) {
+        //We found the node. Swap it's current val to new one passed in args
+        container_of(node, Entry, node)->val.swap(cmd[2]);
+    } else {
+        //Create new entry into hashtable.
+        Entry *entry = new Entry();
+        entry->key.swap(key.key);
+        entry->node.hcode = key.node.hcode;
+        entry->val.swap(cmd[2]);
+        hm_insert(&g_data.db, &entry->node);
+    }
+
     return RES_OK;
 }
 
-static uint32_t do_del(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen)
+static uint32_t do_del(std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen)
 {
     (void)res;
     (void)reslen;
-    g_map.erase(cmd[1]);
+    
+    Entry key;
+    key.key.swap(cmd[1]);
+    key.node.hcode = str_hash((uint8_t *)key.key.data(), key.key.size());
+
+    HNode *node = hm_pop(&g_data.db, &key.node, &entry_eq);
+
+    if(node) {
+        delete container_of(node, Entry, node);
+    }
+
     return RES_OK;
 }
 
@@ -522,6 +572,21 @@ static int32_t one_request(int connfd)
     memcpy(wBuf, &len, 4);        // Copy len of write msg to write buffer
     memcpy(&wBuf[4], reply, len); // Copy msg to write buffer
     return write_all(connfd, wBuf, 4 + len);
+}
+
+static uint64_t str_hash(const uint8_t *data, size_t len) {
+    uint32_t h = 0x811C9DC5;
+    for(size_t i = 0; i < len; i++) {
+        h = (h + data[i]) * 0x10000193;
+    }
+
+    return h;
+}
+
+static bool entry_eq(HNode *lhs, HNode *rhs) {
+    struct Entry *le = container_of(lhs, struct Entry, node);
+    struct Entry *re = container_of(rhs, struct Entry, node);
+    return le->key == re->key;
 }
 
 int main()
