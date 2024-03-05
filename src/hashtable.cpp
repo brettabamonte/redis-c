@@ -58,6 +58,16 @@ static HNode *h_detach(HTab *htab, HNode **from)
     return node;
 }
 
+static void hm_start_resizing(HMap *hmap)
+{
+    assert(hmap->h2.tab == NULL);
+
+    // Create a bigger hashtable and swap them
+    hmap->h2 = hmap->h1;
+    h_init(&hmap->h1, (hmap->h1.mask + 1) * 2);
+    hmap->resizing_pos = 0;
+}
+
 void hm_insert(HMap *hmap, HNode *node)
 {
     if (!hmap->h1.tab)
@@ -76,21 +86,12 @@ void hm_insert(HMap *hmap, HNode *node)
         if (load_factor >= k_max_load_factor)
         {
             // Create a larger table
+            hm_start_resizing(hmap);
         }
     }
 
     // Move some keys into the newer table
     hm_start_resizing(hmap);
-}
-
-static void hm_start_resizing(HMap *hmap)
-{
-    assert(hmap->h2.tab == NULL);
-
-    // Create a bigger hashtable and swap them
-    hmap->h2 = hmap->h1;
-    h_init(&hmap->h1, (hmap->h1.mask) * 2);
-    hmap->resizing_pos = 0;
 }
 
 static void hm_help_resizing(HMap *hmap)
