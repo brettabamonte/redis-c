@@ -345,7 +345,7 @@ static bool cmd_is(const std::string &word, const char *cmd)
     return 0 == strcasecmp(word.c_str(), cmd);
 }
 
-static void do_request(std::vector<std::string> &cmd, std::string out) {
+static void do_request(std::vector<std::string> &cmd, std::string &out) {
     if(cmd.size() == 1 && cmd_is(cmd[0], "keys")) {
         //do keys
         do_keys(cmd, out);
