@@ -6,6 +6,7 @@
 const size_t k_max_load_factor = 8;
 const size_t k_resizing_work = 128; // constant work
 
+//Initalizes a hashtable that is a power of 2
 static void h_init(HTab *htab, size_t n)
 {
     assert(n > 0 && ((n - 1) & n) == 0);
@@ -14,6 +15,7 @@ static void h_init(HTab *htab, size_t n)
     htab->size = 0;
 }
 
+//Inserts a node into a hashtable
 static void h_insert(HTab *htab, HNode *node)
 {
     size_t pos = node->hcode & htab->mask; // slot index
@@ -50,6 +52,7 @@ static HNode **h_lookup(HTab *htab, HNode *key, bool (*eq)(HNode *, HNode *))
     return NULL;
 }
 
+//Deletes node from hashtable
 static HNode *h_detach(HTab *htab, HNode **from)
 {
     HNode *node = *from;
@@ -58,6 +61,7 @@ static HNode *h_detach(HTab *htab, HNode **from)
     return node;
 }
 
+//Moves the newer hashtable to the older hashtable. Then increases size of newer hashtable by factor of 2
 static void hm_start_resizing(HMap *hmap)
 {
     assert(hmap->h2.tab == NULL);
@@ -68,6 +72,7 @@ static void hm_start_resizing(HMap *hmap)
     hmap->resizing_pos = 0;
 }
 
+//Inserts a node into the hashmap
 void hm_insert(HMap *hmap, HNode *node)
 {
     if (!hmap->h1.tab)
@@ -94,6 +99,7 @@ void hm_insert(HMap *hmap, HNode *node)
     hm_start_resizing(hmap);
 }
 
+//Moves some keys to the new table. Triggered from lookups and updates
 static void hm_help_resizing(HMap *hmap)
 {
     size_t nwork = 0;
@@ -123,6 +129,7 @@ static void hm_help_resizing(HMap *hmap)
     }
 }
 
+//Check both tables in hashmap
 HNode *hm_lookup(HMap *hmap, HNode *key, bool (*eq)(HNode *, HNode *))
 {
     hm_help_resizing(hmap);
@@ -131,6 +138,7 @@ HNode *hm_lookup(HMap *hmap, HNode *key, bool (*eq)(HNode *, HNode *))
     return from ? *from : NULL;
 }
 
+//Deletes node from hashtable
 HNode *hm_pop(HMap *hmap, HNode *key, bool (*eq)(HNode *, HNode *))
 {
     hm_help_resizing(hmap);
@@ -148,11 +156,13 @@ HNode *hm_pop(HMap *hmap, HNode *key, bool (*eq)(HNode *, HNode *))
     return NULL;
 }
 
+//Returns size of the two hashtables
 size_t hm_size(HMap *hmap)
 {
     return hmap->h1.size + hmap->h2.size;
 }
 
+//Destroys hashmap
 void hm_destroy(HMap *hmap)
 {
     free(hmap->h1.tab);
