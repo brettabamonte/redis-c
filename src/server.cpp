@@ -1,3 +1,12 @@
+/*
+
+Serialization Protocol:
+    TLV - Type Length Value
+
+    Type of Data Being Transmitted/Received - Length in Bytes of Data - Payload with Data
+
+*/
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -281,13 +290,15 @@ static void do_del(std::vector<std::string> &cmd, std::string &out)
         delete container_of(node, Entry, node);
     }
 
+    //Returns whether or not deletion took place
     return out_int(out, node ? 1 : 0);
 }
 
 static void do_keys(std::vector<std::string> &cmd, std::string &out) {
     (void)cmd;
     out_arr(out, (uint32_t)hm_size(&g_data.db));
-
+    h_scan(&g_data.db.h1, &cb_scan, &out);
+    h_scan(&g_data.db.h2, &cb_scan, &out);
 }
 
 static int32_t parse_req(const uint8_t *data, size_t len, std::vector<std::string> &out)
