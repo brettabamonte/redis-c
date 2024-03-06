@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-const size_t k_max_load_factor = 0;
+const size_t k_max_load_factor = 8;
 const size_t k_resizing_work = 128; // constant work
 
 static void h_init(HTab *htab, size_t n)
