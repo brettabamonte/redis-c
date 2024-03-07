@@ -2,25 +2,35 @@
 CXX=g++
 CXXFLAGS=-Wall -Wextra -O2
 
+#Directories
+SRCDIR = src
+TESTDIR = tests
+BINDIR = bin
+
 # Define source files and object files
 SERVER_SRCS=src/server.cpp src/hashtable.cpp
 SERVER_OBJS=$(SERVER_SRCS:.cpp=.o)
 CLIENT_SRCS=src/client.cpp
 CLIENT_OBJS=$(CLIENT_SRCS:.cpp=.o)
+TEST_SRCS=tests/avl-test.cpp src/avl.cpp
+TEST_OBJS=$(TEST_SRCS:.cpp=.o)
 
 # Rule for building the server
 server: $(SERVER_OBJS)
-	$(CXX) $(CXXFLAGS) -o server $(SERVER_OBJS)
+	$(CXX) $(CXXFLAGS) -o $(BINDIR)/server $(SERVER_OBJS)
 
 # Rule for building the client
 client: $(CLIENT_OBJS)
-	$(CXX) $(CXXFLAGS) -o client $(CLIENT_OBJS)
+	$(CXX) $(CXXFLAGS) -o $(BINDIR)/client $(CLIENT_OBJS)
+
+#Rule for building tests
+tests: $(TEST_OBJS)
+	$(CXX) $(CXXFLAGS) -o $(BINDIR)/tests $(TEST_OBJS)
 
 # Generic rule for converting .cpp files to .o files
-%.o: %.cpp
+$(BINDIR)/%.o: $(SRCDIR)/%.cpp $(TESTDIR)/%.cpp | $(BINDIR)/.dir
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Clean rule
+# Clean rule to remove object files and executables
 clean:
-	rm -f src/*.o server
-	rm -f src/*.o client
+	rm -rf $(BINDIR)/*
