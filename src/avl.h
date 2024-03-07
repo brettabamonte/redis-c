@@ -17,3 +17,5 @@ AVLNode *avl_fix_right(AVLNode *root);
 AVLNode *avl_fix(AVLNode *node);
 AVLNode *avl_del(AVLNode *node);
 void avl_init(AVLNode *node);
+uint32_t avl_depth(AVLNode *node);
+uint32_t avl_count(AVLNode *node);

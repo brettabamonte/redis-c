@@ -2,26 +2,26 @@
 #include "avl.h"
 #include <algorithm>
 
-static void avl_init(AVLNode *node) {
+void avl_init(AVLNode *node) {
     node->depth = 1;
     node->count = 1;
     node->left = node->right = node->parent = NULL;
 }
 
-static uint32_t avl_depth(AVLNode *node) {
+uint32_t avl_depth(AVLNode *node) {
     return node ? node->depth : 0;
 }
 
-static uint32_t avl_count(AVLNode *node) {
+uint32_t avl_count(AVLNode *node) {
     return node ? node->count : 0;
 }
 
-static void avl_update(AVLNode *node) {
+void avl_update(AVLNode *node) {
     node->depth = 1 + std::max(avl_depth(node->left), avl_depth(node->right));
     node->count = 1 + avl_count(node->left) + avl_count(node->right);
 }
 
-static AVLNode *rotate_left(AVLNode *node) {
+AVLNode *rotate_left(AVLNode *node) {
     AVLNode *new_node = node->right;
 
     if(new_node->left) {
@@ -39,7 +39,7 @@ static AVLNode *rotate_left(AVLNode *node) {
     return new_node;
 }
 
-static AVLNode *rotate_right(AVLNode *node) {
+AVLNode *rotate_right(AVLNode *node) {
     AVLNode *new_node = node->left;
 
     if(new_node->right) {
@@ -57,7 +57,7 @@ static AVLNode *rotate_right(AVLNode *node) {
     return new_node;
 }
 
-static AVLNode *avl_fix_left(AVLNode *root) {
+AVLNode *avl_fix_left(AVLNode *root) {
     if(avl_depth(root->left->left) < avl_depth(root->left->right)) {
         //Left rot makes left st > right st
         root->left = rotate_left(root->left);
@@ -67,7 +67,7 @@ static AVLNode *avl_fix_left(AVLNode *root) {
     return rotate_right(root);
 }
 
-static AVLNode *avl_fix_right(AVLNode *root) {
+AVLNode *avl_fix_right(AVLNode *root) {
     if(avl_depth(root->right->right) < avl_depth(root->right->left)) {
         //Left rot makes left st > right st
         root->right = rotate_right(root->right);
@@ -78,7 +78,7 @@ static AVLNode *avl_fix_right(AVLNode *root) {
 }
 
 //Fixes the tree after insertion and deletion
-static AVLNode *avl_fix(AVLNode *node) {
+AVLNode *avl_fix(AVLNode *node) {
     while(true) {
         avl_update(node);
         uint32_t l = avl_depth(node->left);
@@ -106,7 +106,7 @@ static AVLNode *avl_fix(AVLNode *node) {
 }
 
 //Deletes a node
-static AVLNode *avl_del(AVLNode *node) {
+AVLNode *avl_del(AVLNode *node) {
     if(node->right == NULL) {
         //No right st, replace node with left st
         AVLNode *parent = node->parent;
