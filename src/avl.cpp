@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "avl-updated.h"
+#include "avl.h"
 
 uint32_t node_height(struct AVLNode *node) {
     uint32_t height_left, height_right;
