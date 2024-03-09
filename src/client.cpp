@@ -10,18 +10,11 @@
 #include <assert.h>
 #include <string>
 #include <vector>
+#include <utils.h>
 
 // FUTURE UPDATES:
 
 const size_t k_max_msg = 4096;
-
-enum {
-    SER_NIL = 0, //'NULL'
-    SER_ERR = 1, //Error code and message
-    SER_STR = 2, //string
-    SER_INT = 3, //int64
-    SER_ARR = 4, //array
-};
 
 static void msg(const char *msg)
 {
