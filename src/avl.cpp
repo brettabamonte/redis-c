@@ -1,153 +1,190 @@
-#include <stdint.h>
-#include "avl.h"
-#include <algorithm>
+#include <stdio.h>
+#include <stdlib.h>
+#include "avl-updated.h"
 
-void avl_init(AVLNode *node) {
-    node->depth = 1;
-    node->count = 1;
-    node->left = node->right = node->parent = NULL;
+uint32_t node_height(struct AVLNode *node) {
+    uint32_t height_left, height_right;
+
+    height_left = node && node->left ? node->left->height : 0;
+    height_right = node && node->right ? node->right->height : 0;
+
+    return 1 + (height_left > height_right ? height_left : height_right);
 }
 
-uint32_t avl_depth(AVLNode *node) {
-    return node ? node->depth : 0;
+uint32_t node_count(struct AVLNode *node) {
+    if(!node) return 0;
+
+    return 1 + node_count(node->left) + node_count(node->right);
 }
 
-uint32_t avl_count(AVLNode *node) {
-    return node ? node->count : 0;
+int balanceFactor(struct AVLNode *node) {
+    int height_left, height_right;
+
+    height_left = node && node->left ? node->left->height : 0;
+    height_right = node && node->right ? node->right->height : 0;
+
+    return height_left - height_right;
 }
 
-void avl_update(AVLNode *node) {
-    node->depth = 1 + std::max(avl_depth(node->left), avl_depth(node->right));
-    node->count = 1 + avl_count(node->left) + avl_count(node->right);
-}
+struct AVLNode *ll_rotation(struct AVLNode **root, struct AVLNode **node) {
+    struct AVLNode *left_child = (*node)->left;
 
-AVLNode *rotate_left(AVLNode *node) {
-    AVLNode *new_node = node->right;
+    (*node)->left = left_child->right;
+    left_child->right = (*node);
 
-    if(new_node->left) {
-        new_node->left->parent = node;
+    (*node)->height = node_height((*node));
+    left_child->height = node_height(left_child);
+
+    if(*root == (*node)) {
+        *root = left_child;
     }
 
-    node->right = new_node->left;
-    new_node->left = node;
-    new_node->parent = node->parent;
-    node->parent = new_node;
-
-    avl_update(node);
-    avl_update(new_node);
-
-    return new_node;
+    return left_child;
 }
 
-AVLNode *rotate_right(AVLNode *node) {
-    AVLNode *new_node = node->left;
+/*
+Ex. 
+1               3
+ 3       =>   1   4
+2 4            2
+*/
+struct AVLNode *rr_rotation(struct AVLNode **root, struct AVLNode **node) {
+    struct AVLNode *right_child = (*node)->right;
 
-    if(new_node->right) {
-        new_node->right->parent = node;
+    //Peform a single left rotation
+    (*node)->right = right_child->left;
+    right_child->left = (*node);
+
+    //Recalculate heights
+    (*node)->height = node_height((*node));
+    right_child->height = node_height(right_child);
+
+    if(*root == *node) {
+        *root = right_child;
     }
 
-    node->left = new_node->right;
-    new_node->right = node;
-    new_node->parent = node->parent;
-    node->parent = new_node;
-
-    avl_update(node);
-    avl_update(new_node);
-
-    return new_node;
+    return right_child;
 }
 
-AVLNode *avl_fix_left(AVLNode *root) {
-    if(avl_depth(root->left->left) < avl_depth(root->left->right)) {
-        //Left rot makes left st > right st
-        root->left = rotate_left(root->left);
+struct AVLNode *lr_rotation(struct AVLNode **root, struct AVLNode **node) {
+
+    //Rotate right on the right child
+    (*node)->left = rr_rotation(root, &((*node)->left));
+
+    //Rotate left on the node    
+    return ll_rotation(root, node);
+}
+
+/*
+Left subtree that is right heavy. We need to make it left heavy
+Ex.
+ 30                 30              20
+10          =>     20  =>        10   30
+ 20               10  
+*/
+struct AVLNode *rl_rotation(struct AVLNode **root, struct AVLNode **node) {
+    (*node)->right = ll_rotation(root, &((*node)->right));
+    return rr_rotation(root, node);
+}
+
+struct AVLNode *insert(struct AVLNode **root, struct AVLNode **node, uint32_t key) {
+    //Create node
+    if(*node == NULL) {
+        *node = new AVLNode();
+        (*node)->height = 1;
+        (*node)->left = (*node)->right = NULL;
+        (*node)->val = key;
+
+        if(*root == NULL) {
+            *root = *node;
+        }
+
+        return *node;
     }
 
-    //A right rotation restores balace if L-ST is > 2. And the Left Left ST is > Left Rigth ST
-    return rotate_right(root);
-}
-
-AVLNode *avl_fix_right(AVLNode *root) {
-    if(avl_depth(root->right->right) < avl_depth(root->right->left)) {
-        //Left rot makes left st > right st
-        root->right = rotate_right(root->right);
+    if(key < (*node)->val) {
+        (*node)->left = insert(root, &((*node)->left), key);
+    } else if(key > (*node)->val) {
+        (*node)->right = insert(root, &((*node)->right), key);
     }
 
-    //A right rotation restores balace if L-ST is > 2. And the Left Left ST is > Left Rigth ST
-    return rotate_right(root);
-}
+    (*node)->height = node_height((*node));
 
-//Fixes the tree after insertion and deletion
-AVLNode *avl_fix(AVLNode *node) {
-    while(true) {
-        avl_update(node);
-        uint32_t l = avl_depth(node->left);
-        uint32_t r = avl_depth(node->right);
-
-        AVLNode **from = NULL;
-
-        if(AVLNode *p = node->parent) {
-            from = (p->left == node) ? &p->left : &p->right;
-        }
-
-        if(l == r + 2) {
-            node = avl_fix_left(node);
-        } else if(1 + 2 == r) {
-            node = avl_fix_right(node);
-        }
-
-        if(!from) {
-            return node;
-        }
-
-        *from = node;
-        node = node->parent;
+    //Check balance factors. Perform appropriate rotations
+    if(balanceFactor((*node)) == 2 && balanceFactor((*node)->left) == 1) {
+        return ll_rotation(root, node);
+    } else if(balanceFactor((*node)) == 2 && balanceFactor((*node)->left) == -1) {
+        return lr_rotation(root, node);
+    } else if(balanceFactor((*node)) == -2 && balanceFactor((*node)->right) == -1) {
+        return rr_rotation(root, node);
+    } else if(balanceFactor((*node)) == -2 && balanceFactor((*node)->right) == 1) {
+        return rl_rotation(root, node);
     }
+
+    return *node;
 }
 
-//Deletes a node
-AVLNode *avl_del(AVLNode *node) {
-    if(node->right == NULL) {
-        //No right st, replace node with left st
-        AVLNode *parent = node->parent;
+bool del(struct AVLNode **root, struct AVLNode **node, uint32_t key) {
+    if(*node == NULL) {
+        return false;
+    }
 
-        if(node->left) {
-            node->left->parent = parent;
-        }
-
-        if(parent) {
-            //Attach left st to the parent
-            (parent->left == node ? parent->left : parent->right) = node->left;
-            return avl_fix(parent);
-        } else {
-            //Removing root
-            return node->left;
-        }
+    if(key < (*node)->val) {
+        return del(root, &((*node)->left), key);
+    } else if(key > (*node)->val) {
+        return del(root, &((*node)->right), key);
     } else {
-            //Detach successor
-            AVLNode *victim = node->right;
-            
-            while(victim->left) {
-                victim = victim->left;
-            }
+        //We found node to delete
+        
+        //Check for 1 child or leaf
+        if((*node)->left == NULL || (*node)->right == NULL) {
+            struct AVLNode *temp = (*node)->left ? (*node)->left : (*node)->right;
 
-            AVLNode *root = avl_del(victim);
-            *victim = *node;
-
-            if(victim->left) {
-                victim->left->parent = victim;
-            }
-
-            if(victim->right) {
-                victim->right->parent = victim; 
-            }
-
-            if(AVLNode *parent = node->parent) {
-                (parent->left == node ? parent->left : parent->right) = victim;
-                return root;
+            //Leaf
+            if(!temp) {
+                //temp = (*node);
+                (*node) = NULL;
+                return true;
             } else {
-                //Removing root
-                return victim;
+                //One child
+                struct AVLNode *to_delete = *node;
+                *node = temp;
+                free(to_delete);
+                return true;
             }
+        } else {
+            //Multiple children. Get inorder successor
+            //Inorder successor is deepest left child in right sub-tree
+            struct AVLNode **succ_parent = &((*node)->right);
+
+            while((*succ_parent)->left != NULL) {
+                succ_parent = &((*succ_parent)->left);
+            }
+
+            //copy contents of inorder successor
+            (*node)->val = (*succ_parent)->val;
+
+            //delete inorder successor
+            del(root, succ_parent, (*succ_parent)->val);
+
+            return true;
         }
+    }
+
+    if(*node != NULL) {
+        ///Update heights
+        (*node)->height = node_height((*node));
+
+        //Check balance factors and perform rotations
+        //Check balance factors. Perform appropriate rotations
+        if(balanceFactor((*node)) == 2 && balanceFactor((*node)->left) == 1) {
+            ll_rotation(root, node);
+        } else if(balanceFactor((*node)) == 2 && balanceFactor((*node)->left) == -1) {
+            rl_rotation(root, node);
+        } else if(balanceFactor((*node)) == -2 && balanceFactor((*node)->right) == -1) {
+            rr_rotation(root, node);
+        } else if(balanceFactor((*node)) == -2 && balanceFactor((*node)->right) == 1) {
+            lr_rotation(root, node);
+        }
+    }
 }

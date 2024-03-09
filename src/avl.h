@@ -1,21 +1,19 @@
 #include <stdint.h>
-#include <stdlib.h>
 
 struct AVLNode {
-    uint32_t depth = 0; //subtree height
-    uint32_t count = 0; //subtree size
-    AVLNode *left = NULL;
-    AVLNode *right = NULL;
-    AVLNode *parent = NULL;
+    struct AVLNode *left;
+    struct AVLNode *right; 
+    int height; 
+    uint32_t val;
 };
 
-void avl_update(AVLNode *node);
-AVLNode *rotate_left(AVLNode *node);
-AVLNode *rotate_right(AVLNode *node);
-AVLNode *avl_fix_left(AVLNode *root);
-AVLNode *avl_fix_right(AVLNode *root);
-AVLNode *avl_fix(AVLNode *node);
-AVLNode *avl_del(AVLNode *node);
-void avl_init(AVLNode *node);
-uint32_t avl_depth(AVLNode *node);
-uint32_t avl_count(AVLNode *node);
+struct Data {
+    struct AVLNode *node;
+    uint32_t val;
+};
+
+uint32_t node_count(struct AVLNode *node);
+int balanceFactor(struct AVLNode *node);
+uint32_t node_height(struct AVLNode *node);
+struct AVLNode *insert(struct AVLNode **root, struct AVLNode **node, uint32_t key);
+bool del(struct AVLNode **root, struct AVLNode **node, uint32_t key);
