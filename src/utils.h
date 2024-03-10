@@ -27,4 +27,5 @@ enum {
     (type *)( (char *)__mptr - offsetof(type, member) );})
 
 
-static bool str2dbl(const std::string &s, double &out);
+bool str2dbl(const std::string &s, double &out);
+bool str2int(const std::string &s, int64_t &out);
