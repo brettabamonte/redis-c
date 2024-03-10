@@ -19,7 +19,8 @@ enum {
     SER_ERR = 1, //Error code and message
     SER_STR = 2, //string
     SER_INT = 3, //int64
-    SER_ARR = 4, //array
+    SER_DBL = 4, //double
+    SER_ARR = 5, //array
 };
 
 #define container_of(ptr, type, member) ({                  \
