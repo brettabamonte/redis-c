@@ -8,11 +8,11 @@ TESTDIR = tests
 BINDIR = bin
 
 # Define source files and object files
-SERVER_SRCS=src/server.cpp src/hashtable.cpp
+SERVER_SRCS=src/server.cpp src/hashtable.cpp src/utils.cpp src/zset.cpp src/avl.cpp
 SERVER_OBJS=$(SERVER_SRCS:.cpp=.o)
-CLIENT_SRCS=src/client.cpp
+CLIENT_SRCS=src/client.cpp src/utils.cpp
 CLIENT_OBJS=$(CLIENT_SRCS:.cpp=.o)
-TEST_SRCS=tests/avl-test.cpp src/avl.cpp
+TEST_SRCS=tests/avl-test.cpp src/avl.cpp src/utils.cpp src/hashtable.cpp
 TEST_OBJS=$(TEST_SRCS:.cpp=.o)
 
 # Rule for building the server
@@ -34,3 +34,4 @@ $(BINDIR)/%.o: $(SRCDIR)/%.cpp $(TESTDIR)/%.cpp | $(BINDIR)/.dir
 # Clean rule to remove object files and executables
 clean:
 	rm -rf $(BINDIR)/*
+	rm -rf $(SRCDIR)/*.o
