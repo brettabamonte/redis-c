@@ -72,33 +72,6 @@ static void hm_start_resizing(HMap *hmap)
     hmap->resizing_pos = 0;
 }
 
-//Inserts a node into the hashmap
-void hm_insert(HMap *hmap, HNode *node)
-{
-    if (!hmap->h1.tab)
-    {
-        // Init a new hashtable of size 4 (2^2)
-        h_init(&hmap->h1, 4);
-    }
-
-    // Insert key into newer table
-    h_insert(&hmap->h1, node);
-
-    // Check the load factor of the newer table
-    if (!hmap->h2.tab)
-    {
-        size_t load_factor = hmap->h1.size / (hmap->h1.mask + 1);
-        if (load_factor >= k_max_load_factor)
-        {
-            // Create a larger table
-            hm_start_resizing(hmap);
-        }
-    }
-
-    // Move some keys into the newer table
-    hm_start_resizing(hmap);
-}
-
 //Moves some keys to the new table. Triggered from lookups and updates
 static void hm_help_resizing(HMap *hmap)
 {
@@ -127,6 +100,33 @@ static void hm_help_resizing(HMap *hmap)
         // Init a new struct for the older table
         hmap->h2 = HTab();
     }
+}
+
+//Inserts a node into the hashmap
+void hm_insert(HMap *hmap, HNode *node)
+{
+    if (!hmap->h1.tab)
+    {
+        // Init a new hashtable of size 4 (2^2)
+        h_init(&hmap->h1, 4);
+    }
+
+    // Insert key into newer table
+    h_insert(&hmap->h1, node);
+
+    // Check the load factor of the newer table
+    if (!hmap->h2.tab)
+    {
+        size_t load_factor = hmap->h1.size / (hmap->h1.mask + 1);
+        if (load_factor >= k_max_load_factor)
+        {
+            // Create a larger table
+            hm_start_resizing(hmap);
+        }
+    }
+
+    // Move some keys into the newer table
+    hm_help_resizing(hmap);
 }
 
 //Check both tables in hashmap
