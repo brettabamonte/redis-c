@@ -1,4 +1,7 @@
+#include "../src/zset.h"
 #include "../src/avl.h"
+#include "../src/hashtable.h"
+#include "../src/utils.h"
 #include <assert.h>
 #include <algorithm>
 #include <set>
@@ -8,30 +11,110 @@
     (type *)((char *) __mptr - __offsetof(type, member)); \
 })
 
-struct Container {
-    AVLNode *root = NULL;
+struct Entry {
+    struct HNode node;
+    uint32_t type = 0;
+    std::string key;
+    std::string val; //string
+    uint32_t val2;
+    ZSet *zset = NULL; //sorted set
 };
 
-static void add(Container *c, uint32_t val) {
-    insert(&(c->root), &(c->root), val);
+struct HKey {
+    HNode hnode;
+    const char *key = NULL;
+    size_t len = 0;
+};
+
+static bool entry_eq(HNode *lhs, HNode *rhs) {
+    struct Entry *le = container_of(lhs, struct Entry, node);
+    struct Entry *re = container_of(rhs, struct Entry, node);
+    return le->key == re->key;
 }
 
-static bool remove(Container *c, uint32_t val) {
-    return del(&(c->root), &(c->root), val);
+static char *generate_key() {
+    const int TEST_KEY_LENGTH = 10;
+    // Allocate memory for the string, including space for the null terminator
+    char *key = (char *)malloc(TEST_KEY_LENGTH + 1);
+
+    if (key != NULL) {
+        for (int i = 0; i < TEST_KEY_LENGTH; i++) {
+            // Generate a random uppercase letter and store it in the key
+            key[i] = rand() % (90 - 65 + 1) + 65;
+        }
+
+        // Add the null terminator at the end of the string
+        key[TEST_KEY_LENGTH] = '\0';
+    }
+
+    // Return the dynamically allocated key
+    return key;
 }
 
-static void node_verify(AVLNode *parent, AVLNode *node) {
+static int node_compare(AVLNode *lhs, double score, const char *key, size_t len) {
+    ZNode *zl = container_of(lhs, ZNode, tree_node);
+
+    //First compare score
+    if(zl->score != score) {
+        return (zl->score < score) ? -1 : 1;
+    }
+
+    //Compare name
+    int rv = memcmp(zl->key, key, min(zl->len, len));
+    if(rv != 0) {
+        return rv;
+    }
+
+    //Compare length
+    if(zl->len != len) {
+        return zl->len < len ? -1 : 1;
+    }
+    
+    return 0;
+}
+
+int znode_compare(AVLNode *lhs, AVLNode *rhs) {
+    ZNode *zr = container_of(rhs, ZNode, tree_node);
+    return node_compare(lhs, zr->score, zr->key, zr->len);
+}
+
+static void add(ZSet *zset, ZNode *znode_to_add, std::string key_to_add) {
+    Entry key;
+    key.key.swap(key_to_add);
+    key.node.hcode = str_hash((uint8_t *)key.key.data(), key.key.size());
+
+    //Create new entry into hashtable.
+    Entry *entry = new Entry();
+    entry->key.swap(key.key);
+    entry->node.hcode = key.node.hcode;
+    entry->val2 = znode_to_add->score;
+    hm_insert(&(zset->hashmap), &entry->node);
+
+    zset->tree_root = insert(&(zset->tree_root), &(znode_to_add->tree_node), znode_compare);
+}
+
+//TODO: Implement remove function for zset
+//static bool remove(ZSet *zset, std::string key_to_delete) {
+    //find node
+//    Entry key;
+//    key.key.swap(key_to_delete);
+//    key.node.hcode = str_hash((uint8_t *)key.key.data(), key.key.size());
+//
+//    HNode *node = hm_lookup(&(zset->hashmap), &key.node, &entry_eq);
+//
+//    ZNode *znode = container_of(node, ZNode, hashmap_node);
+//    
+//    return del(&(zset->tree_root), &(znode->tree_node), znode_compare);
+//}
+
+static void node_verify(AVLNode *node) {
     if(node == NULL) {
         return;
     }
 
-    if(parent == NULL) {
-        return;
-    }
-
     //Verify subtrees
-    node_verify(node, node->left);
-    node_verify(node, node->right);
+    node_verify(node->left);
+    node_verify(node->right);
 
     //Verify balance factor
     assert(balanceFactor(node) >= -1 && balanceFactor(node) <= 1);
@@ -40,12 +123,29 @@ static void node_verify(AVLNode *parent, AVLNode *node) {
     assert(node->height == 1 + std::max(node_height(node->left), node_height(node->right)));
 
     //Make sure data is in order
+    struct ZNode *node_container = container_of(node, ZNode, tree_node);
+
     if(node->left) {
-        assert(parent->val <= node->val);
+        struct ZNode *child_container = container_of(node->left, ZNode, tree_node);
+        assert(child_container->score <= node_container->score);
     }
     if(node->right) {
-        assert(parent->val >= node->val);
+        struct ZNode *child_container = container_of(node->right, ZNode, tree_node);
+        assert(child_container->score >= node_container->score);
     }
+}
+
+static ZNode *zset_lookup(ZSet *zset, const char *key_to_lookup, size_t len) {
+    if(!zset->tree_root) {
+        return NULL;
+    }
+
+    HKey key;
+    key.hnode.hcode = str_hash((uint8_t *)key_to_lookup, len);
+    key.key = key_to_lookup;
+    key.len = len;
+    HNode *found = hm_lookup(&(zset->hashmap), &key.hnode, &entry_eq);
+    return found ? container_of(found, ZNode, hashmap_node) : NULL;
 }
 
 static void extract(AVLNode *node, std::multiset<uint32_t> &extracted) {
@@ -54,7 +154,8 @@ static void extract(AVLNode *node, std::multiset<uint32_t> &extracted) {
     }
 
     extract(node->left, extracted);
-    extracted.insert(node->val);
+    uint32_t node_score = container_of(node, ZNode, tree_node)->score;
+    extracted.insert(node_score);
     extract(node->right, extracted);
 }
 
@@ -68,15 +169,18 @@ static void tree_verify(AVLNode *root, std::multiset<uint32_t> &ref) {
     assert(extracted == ref);
 
     //Verify nodes
-    node_verify(NULL, root);
+    node_verify(root);
 }
 
-static void inorder_traversal(AVLNode *node) {
+static void traversal(AVLNode *node) {
     if(!node) return;
 
-    inorder_traversal(node->left);
-    printf("%lu ", node->val);
-    inorder_traversal(node->right);
+    traversal(node->left);
+    ZNode *znode = container_of(node, ZNode, tree_node);
+    if(znode) {
+        printf("(%s, %d) and hashnode info: hcode - %lu\n", znode->key, znode->score, znode->hashmap_node.hcode);
+    }
+    traversal(node->right);
 }
 
 static int search(AVLNode *node, uint32_t key) {
@@ -92,29 +196,44 @@ static int search(AVLNode *node, uint32_t key) {
 }
 
 int main() {
-    Container *c = new Container();
-    std::multiset<uint32_t> ref;
+  //Create zset obj and reference multiset for testing
+  //create basic hashtable
+  ZSet *zset = (struct ZSet *)malloc(sizeof(struct ZSet));
+
+  std::multiset<uint32_t> ref;
+  char **keys = (char **)malloc(sizeof(char *) * 100);
+  int pos = 0;
 
     //Random insertion & deletion
-    for(uint32_t i = 0; i < 1000; i++) {
-        //Random value
+    for(uint32_t i = 0; i < 100; i++) {
+        //Random value and key
         uint32_t val = (uint32_t)rand() ^ 999999;
+        char *key = generate_key();
         
         //Check for duplicate before adding to ref
-        if(search(c->root, val) == 0) {
+        if(search(zset->tree_root, val) == 0) {
             ref.insert(val);
         }
+        keys[pos++] = key;
+        //Create node
+        ZNode *znode = new ZNode();
+        znode->hashmap_node.next = NULL;
+        znode->hashmap_node.hcode = str_hash((uint8_t *)key, sizeof(key));
+
+        znode->tree_node.height = 1;
+        znode->score = val;        
+        znode->key = (char *)malloc(sizeof(key) + 1);
+        strcpy(znode->key, key);
+        znode->len = strlen(key);
 
         //Insert to tree
-        add(c, val);
-
-        tree_verify(c->root, ref);
+        add(zset, znode, key);
     }
 
-    for(uint32_t i = 0; i < 100; i++) {
-        uint32_t val = (uint32_t)rand() & 999;
-        remove(c, val);
-        ref.erase(val);
-        tree_verify(c->root, ref);
-    }
+    //Verify
+    tree_verify(zset->tree_root, ref);
+
+    //Traverse tree in order and print results as (key, score)
+    traversal(zset->tree_root);
+
 }
