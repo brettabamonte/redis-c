@@ -72,7 +72,7 @@ static struct AVLNode *lr_rotation(struct AVLNode *node) {
 }
 
 /*
-Left subtree that is right heavy. We need to make it left heavy
+Left subtree that is right heavy. We need to make it left heavy then perform rr rotation.
 Ex.
  30                 30              20
 10          =>     20  =>        10   30
@@ -117,7 +117,13 @@ struct AVLNode *insert(struct AVLNode **cur_node, struct AVLNode *new_node, int(
     return *cur_node;
 }
 
+//FIXME: Nodes are not getting deleted from tree
+//Things to check
+//1. Double check node compare function
+//2. Verify correct traversal of tree
+//3. Verify proper rotating of tree after deletion..bottom-up towards root
 bool del(struct AVLNode **cur_node, struct AVLNode *node_to_delete, int(node_compare_func)(AVLNode *, AVLNode *)) {
+    
     //Didn't find node to delete
     if(*cur_node == NULL) {
         return false;
@@ -129,7 +135,7 @@ bool del(struct AVLNode **cur_node, struct AVLNode *node_to_delete, int(node_com
         return del(&((*cur_node)->right), node_to_delete, node_compare_func);
     } else {
         //We found node to delete
-        
+
         //Check for 1 child or leaf
         if((*cur_node)->left == NULL || (*cur_node)->right == NULL) {
             struct AVLNode *temp = (*cur_node)->left ? (*cur_node)->left : (*cur_node)->right;
@@ -201,6 +207,6 @@ void inorder_traversal(AVLNode *node) {
 
     inorder_traversal(node->left);
     ZNode *znode = container_of(node, ZNode, tree_node);
-    printf("(%s, %f)\n", znode->key, znode->score);
+    printf("(%s, %lu)\n", znode->key, (unsigned long)znode->score);
     inorder_traversal(node->right);
 }
